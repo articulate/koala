@@ -1,0 +1,10 @@
+*.dump
+*.log
+.cache
+.config
+.DS_Store
+.node-gyp
+.node_repl_history
+.v8flags*
+docker-compose.override.yml
+node_modules
