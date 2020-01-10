@@ -5,6 +5,7 @@
   "main": "index.js",
   "author": "engineering@articulate.com",
   "license": "MIT",
+  "repository": "https://github.com/articulate/paperplane-koa.git",
   "scripts": {
     "lint": "eslint .",
     "test": "mocha"
