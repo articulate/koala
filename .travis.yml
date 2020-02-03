@@ -1,0 +1,10 @@
+language: node_js
+node_js:
+  - '12'
+  - '10'
+before_install:
+  - npm install -g yarn@1.10.1
+install:
+  - yarn install --frozen-lockfile
+script:
+  - yarn run test:ci

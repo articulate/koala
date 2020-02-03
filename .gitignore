@@ -8,3 +8,4 @@
 .v8flags*
 docker-compose.override.yml
 node_modules
+.nyc_output
