@@ -7,8 +7,11 @@
   "license": "MIT",
   "repository": "https://github.com/articulate/paperplane-koa.git",
   "scripts": {
+    "coverage": "nyc report --reporter=text-lcov | coveralls",
     "lint": "eslint .",
-    "test": "mocha"
+    "test": "mocha",
+    "test:ci": "yarn run lint && yarn run test:coverage && yarn run coverage",
+    "test:coverage": "nyc yarn run test"
   },
   "dependencies": {
     "cookie": "^0.4.0",
@@ -26,6 +29,7 @@
     "@articulate/spy": "^0.0.1",
     "@hapi/boom": "^8.0.1",
     "chai": "^4.2.0",
+    "coveralls": "^3.0.9",
     "eslint": "^6.7.2",
     "eslint-config-standard": "^14.1.0",
     "eslint-plugin-import": "^2.19.1",
@@ -37,6 +41,7 @@
     "koa": "2.x",
     "koa-router": "^7.4.0",
     "mocha": "^6.2.2",
+    "nyc": "^15.0.0",
     "string-to-stream": "^3.0.1",
     "supertest": "^4.0.2"
   }
