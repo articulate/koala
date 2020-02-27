@@ -14,6 +14,7 @@ const {
   compose,
   converge,
   curry,
+  dissoc,
   either,
   merge,
   path,
@@ -61,6 +62,10 @@ const handleError = curry((ctx, err) => {
 
   if (res.statusCode >= 500 || err.cry) {
     ctx.app.emit('error', err, ctx)
+  }
+
+  if (err.expose === false || (err.expose == null && res.statusCode >= 500)) {
+    return dissoc('body', res)
   }
 
   return res
