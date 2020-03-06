@@ -66,6 +66,8 @@ Your handler function needs to return a `Response` object, or a `Promise` that r
 
 Like [`paperplane`](https://github.com/articulate/paperplane/blob/v3.1.1/docs/getting-started.md#request-object), this library will support [`boom`](https://www.npmjs.com/package/boom), [`http-errors`](https://www.npmjs.com/package/http-errors), & [`joi`](https://www.npmjs.com/package/joi) errors.
 
+Like [Koa](https://github.com/koajs/koa/blob/master/docs/error-handling.md#default-error-handler), if the status code is a client-error, 400-level error status, the error's message & payload, if applicable, will be used as the response body. The response body will be omitted on server-error, 500-level errors. You can override this behavior by setting the `expose` property to `true` or `false` on the error.
+
 An error will be [`emitted to the koa application`](https://github.com/koajs/koa/wiki/Error-Handling) if one of the following is true:
 * The response's status code is greater than or equal to `500`.
 * The error encountered contains a `cry: true` property.

@@ -1,6 +1,6 @@
 const { always: K, compose, pick, prop } = require('ramda')
 const { expect } = require('chai')
-const { NotFound } = require('http-errors')
+const createHttpError = require('http-errors')
 const { Readable } = require('stream')
 const { validate } = require('@articulate/funky')
 const Boom = require('@hapi/boom')
@@ -23,13 +23,21 @@ describe('mount', () => {
   router.get('/body', mount(req => json({ isReadable: req.body instanceof Readable })))
   router.post('/body', mount(req => json({ isReadable: req.body instanceof Readable })))
   router.get('/boom', mount(() => { throw Boom.unauthorized('error message', 'Basic', { realm: 'protected area' }) }))
+  router.get('/boom-expose', mount(() => { throw Object.assign(Boom.unauthorized('error message', 'Basic', { realm: 'protected area' }), { expose: true }) }))
+  router.get('/boom-hidden', mount(() => { throw Object.assign(Boom.unauthorized('error message', 'Basic', { realm: 'protected area' }), { expose: false }) }))
   router.get('/broke', mount(() => ({ body: errorStream() })))
   router.get('/buffer', mount(K({ body: Buffer.from([0x62, 0x75, 0x66, 0x66, 0x65, 0x72]) })))
   router.get('/cookie', mount(compose(json, prop('cookies'))))
   router.get('/cry', mount(() => { throw Object.assign(Boom.badRequest(), { cry: true }) }))
   router.get('/error', mount(() => { throw new Error('error') }))
-  router.get('/http', mount(() => { throw new NotFound() }))
+  router.get('/error-expose', mount(() => { throw Object.assign(new Error('error'), { expose: true }) }))
+  router.get('/error-hidden', mount(() => { throw Object.assign(new Error('error'), { expose: false }) }))
+  router.get('/http', mount(() => { throw new createHttpError.NotFound() }))
+  router.get('/http-expose', mount(() => { throw createHttpError(404, 'Not Found', { expose: true }) }))
+  router.get('/http-hidden', mount(() => { throw createHttpError(404, 'Not Found', { expose: false }) }))
   router.get('/joi', mount(() => validate(Joi.string(), 123)))
+  router.get('/joi-expose', mount(() => validate(Joi.string(), 123).catch(err => Promise.reject(Object.assign(err, { expose: true })))))
+  router.get('/joi-hidden', mount(() => validate(Joi.string(), 123).catch(err => Promise.reject(Object.assign(err, { expose: false })))))
   router.get('/json', mount(K(json({}))))
   router.get('/none', mount(K({ body: undefined })))
   router.get('/protocol', mount(compose(json, pick(['protocol']))))
@@ -175,7 +183,33 @@ describe('mount', () => {
 
   describe('errors', () => {
     it('defaults statusCode to 500', () =>
-      agent.get('/error').expect(500).then(() => {
+      agent.get('/error').expect(500).then(res => {
+        expect(res.body.toString('utf-8')).to.equal('')
+        expect(cry.calls.length).to.equal(1)
+        expect(cry.calls[0][0]).to.be.instanceOf(Error)
+          .that.has.property('message', 'error')
+        // duck type koa context
+        expect(cry.calls[0][1]).to.have.property('app', koa)
+      })
+    )
+
+    it('defaults statusCode to 500, exposed', () =>
+      agent.get('/error-expose').expect(500).then(res => {
+        expect(res.body).to.deep.equal({
+          message: 'error',
+          name: 'Error'
+        })
+        expect(cry.calls.length).to.equal(1)
+        expect(cry.calls[0][0]).to.be.instanceOf(Error)
+          .that.has.property('message', 'error')
+        // duck type koa context
+        expect(cry.calls[0][1]).to.have.property('app', koa)
+      })
+    )
+
+    it('defaults statusCode to 500, hidden', () =>
+      agent.get('/error-hidden').expect(500).then(res => {
+        expect(res.body.toString('utf-8')).to.equal('')
         expect(cry.calls.length).to.equal(1)
         expect(cry.calls[0][0]).to.be.instanceOf(Error)
           .that.has.property('message', 'error')
@@ -190,25 +224,129 @@ describe('mount', () => {
         .expect('www-authenticate', /Basic/)
         .expect('www-authenticate', /realm="protected area"/)
         .expect('www-authenticate', /error="error message"/)
-        .then(() => {
+        .then(res => {
+          expect(JSON.parse(res.body.toString('utf-8'))).to.deep.equal({
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'error message',
+            attributes: { realm: 'protected area', error: 'error message' }
+          })
+          expect(cry.calls.length).to.equal(0)
+        })
+    )
+
+    it('catches and formats boom errors, exposed', () =>
+      agent.get('/boom-expose')
+        .expect(401)
+        .expect('www-authenticate', /Basic/)
+        .expect('www-authenticate', /realm="protected area"/)
+        .expect('www-authenticate', /error="error message"/)
+        .then(res => {
+          expect(JSON.parse(res.body.toString('utf-8'))).to.deep.equal({
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'error message',
+            attributes: { realm: 'protected area', error: 'error message' }
+          })
+          expect(cry.calls.length).to.equal(0)
+        })
+    )
+
+    it('catches and formats boom errors, hidden', () =>
+      agent.get('/boom-hidden')
+        .expect(401)
+        .expect('www-authenticate', /Basic/)
+        .expect('www-authenticate', /realm="protected area"/)
+        .expect('www-authenticate', /error="error message"/)
+        .then(res => {
+          expect(res.body.toString('utf-8')).to.equal('')
           expect(cry.calls.length).to.equal(0)
         })
     )
 
     it('catches and formats http-errors', () =>
-      agent.get('/http').expect(404).then(() => {
+      agent.get('/http').expect(404).then(res => {
+        expect(res.body).to.deep.equal({
+          message: 'Not Found',
+          name: 'NotFoundError'
+        })
+        expect(cry.calls.length).to.equal(0)
+      })
+    )
+
+    it('catches and formats http-errors, exposed', () =>
+      agent.get('/http-expose').expect(404).then(res => {
+        expect(res.body).to.deep.equal({
+          message: 'Not Found',
+          name: 'NotFoundError'
+        })
+        expect(cry.calls.length).to.equal(0)
+      })
+    )
+
+    it('catches and formats http-errors, hidden', () =>
+      agent.get('/http-hidden').expect(404).then(res => {
+        expect(res.body).to.equal('')
         expect(cry.calls.length).to.equal(0)
       })
     )
 
     it('catches and formats joi errors', () =>
-      agent.get('/joi').expect(400).then(() => {
+      agent.get('/joi').expect(400).then(res => {
+        expect(res.body).to.deep.equal({
+          message: '"value" must be a string',
+          name: 'ValidationError',
+          details: [
+            {
+              message: '"value" must be a string',
+              path: [],
+              type: 'string.base',
+              context: {
+                label: 'value',
+                value: 123
+              }
+            }
+          ]
+        })
+        expect(cry.calls.length).to.equal(0)
+      })
+    )
+
+    it('catches and formats joi errors, exposed', () =>
+      agent.get('/joi-expose').expect(400).then(res => {
+        expect(res.body).to.deep.equal({
+          message: '"value" must be a string',
+          name: 'ValidationError',
+          details: [
+            {
+              message: '"value" must be a string',
+              path: [],
+              type: 'string.base',
+              context: {
+                label: 'value',
+                value: 123
+              }
+            }
+          ]
+        })
+        expect(cry.calls.length).to.equal(0)
+      })
+    )
+
+    it('catches and formats joi errors, exposed', () =>
+      agent.get('/joi-hidden').expect(400).then(res => {
+        expect(res.body).to.equal('')
         expect(cry.calls.length).to.equal(0)
       })
     )
 
     it('emits error when cry = true', () =>
-      agent.get('/cry').expect(400).then(() => {
+      agent.get('/cry').expect(400).then(res => {
+        expect(JSON.parse(res.body.toString('utf-8'))).to.deep.equal({
+          error: 'Bad Request',
+          message: 'Bad Request',
+          statusCode: 400
+        })
         expect(cry.calls.length).to.equal(1)
         expect(cry.calls[0][0]).to.be.instanceOf(Error)
           .that.has.property('message', 'Bad Request')
