@@ -1,3 +1,4 @@
+const axios = require('axios').default
 const { always: K, compose, pick, prop } = require('ramda')
 const { expect } = require('chai')
 const createHttpError = require('http-errors')
@@ -11,6 +12,7 @@ const http = require('http')
 const request = require('supertest')
 const spy = require('@articulate/spy')
 const str = require('string-to-stream')
+const nock = require('nock')
 
 const assertBody = require('./lib/assertBody')
 const errorStream = require('./lib/errorStream')
@@ -20,6 +22,7 @@ const { json, mount } = require('../')
 describe('mount', () => {
   const router = new Router()
 
+  router.get('/axios', mount(() => { return axios.get('http://127.0.0.1/dummy-url') }))
   router.get('/body', mount(req => json({ isReadable: req.body instanceof Readable })))
   router.post('/body', mount(req => json({ isReadable: req.body instanceof Readable })))
   router.get('/boom', mount(() => { throw Boom.unauthorized('error message', 'Basic', { realm: 'protected area' }) }))
@@ -217,6 +220,23 @@ describe('mount', () => {
         expect(cry.calls[0][1]).to.have.property('app', koa)
       })
     )
+
+    it('catches and formats axios errors', () => {
+      nock('http://127.0.0.1')
+        .get('/dummy-url')
+        .reply(403, { realm: 'protected area', error: 'error message' })
+
+      return agent.get('/axios')
+        .expect(403)
+        .then((res) => {
+          expect(res.body).to.deep.equal({
+            statusCode: 403,
+            message: 'Request failed with status code 403',
+            data: { realm: 'protected area', error: 'error message' }
+          })
+          expect(cry.calls.length).to.equal(0)
+        })
+    })
 
     it('catches and formats boom errors', () =>
       agent.get('/boom')

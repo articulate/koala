@@ -57,6 +57,7 @@ const contextToPaperplane =
 // handleError :: KoaContext -> Error -> PaperplaneReponse
 const handleError = curry((ctx, err) => {
   if (!(err instanceof Error)) return err
+  if (err.isAxiosError && !err.response) throw err
 
   const res = errorToResponse(err)
 
